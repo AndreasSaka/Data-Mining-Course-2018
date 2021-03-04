@@ -85,8 +85,8 @@ predict.mnb <- function (model,dtm)
 
 
 # --- Get data and labels
-train_corpus <- VCorpus(DirSource("C:\\Users\\Andreas\\Documents\\Courses\\Data Mining\\TEXT MINING ASSIGNMENT\\negative reviews\\", encoding="UTF-8"))
-test_corpus <- VCorpus(DirSource("C:\\Users\\Andreas\\Documents\\Courses\\Data Mining\\TEXT MINING ASSIGNMENT\\positive reviews\\", encoding="UTF-8"))
+train_corpus <- VCorpus(DirSource("your_path_here_for_negative_reviews", encoding="UTF-8"))
+test_corpus <- VCorpus(DirSource("your_path_here_for_positive_reviews", encoding="UTF-8"))
 corpus <- c(train_corpus, test_corpus)
 
 # Create label vector (0 = deceptive), (1 = truthful)
