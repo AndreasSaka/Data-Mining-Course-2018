@@ -1,0 +1,300 @@
+
+
+```{r}
+
+
+install.packages("tm")
+install.packages("entropy")
+install.packages("rpart.plot")
+install.packages("e1071")
+install.packages("SnowballC")
+install.packages("wordcloud")
+install.packages("RTextTools")
+install.packages("caret")
+install.packages("randomForest")
+install.packages("rpart")
+
+
+library(tm)
+library(SnowballC)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+
+
+library(entropy)
+library(e1071)
+library(wordcloud)
+library(RTextTools)
+library(caret)
+
+
+library("phyloseq")
+packageVersion("phyloseq")
+library("ggplot2"); packageVersion("ggplot2")
+install.packages("ggplot2")
+
+```
+```{r}
+'''
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("phyloseq")
+'''
+```
+
+
+
+```{r}
+# Train Multinomial Naive Bayes
+train.mnb <- function (dtm,labels) 
+{
+  call <- match.call()
+  V <- ncol(dtm)
+  N <- nrow(dtm)
+  prior <- table(labels)/N
+  labelnames <- names(prior)
+  nclass <- length(prior)
+  cond.probs <- matrix(nrow=V,ncol=nclass)
+  dimnames(cond.probs)[[1]] <- dimnames(dtm)[[2]]
+  dimnames(cond.probs)[[2]] <- labelnames
+  index <- list(length=nclass)
+  for(j in 1:nclass){
+    index[[j]] <- c(1:N)[labels == labelnames[j]]
+  }
+  
+  for(i in 1:V){
+    for(j in 1:nclass){
+      cond.probs[i,j] <- (sum(dtm[index[[j]],i])+1)/(sum(dtm[index[[j]],])+V)
+    }
+  }
+  list(call=call,prior=prior,cond.probs=cond.probs)
+}
+
+# Predict Multinomial Naive Bayes
+predict.mnb <- function (model,dtm) 
+{
+  classlabels <- dimnames(model$cond.probs)[[2]]
+  logprobs <- dtm %*% log(model$cond.probs)
+  N <- nrow(dtm)
+  nclass <- ncol(model$cond.probs)
+  logprobs <- logprobs+matrix(nrow=N,ncol=nclass,log(model$prior),byrow=T)
+  classlabels[max.col(logprobs)]
+}
+
+
+# --- Get data and labels
+train_corpus <- VCorpus(DirSource("C:\\Users\\Andreas\\Documents\\Courses\\Data Mining\\TEXT MINING ASSIGNMENT\\negative reviews\\", encoding="UTF-8"))
+test_corpus <- VCorpus(DirSource("C:\\Users\\Andreas\\Documents\\Courses\\Data Mining\\TEXT MINING ASSIGNMENT\\positive reviews\\", encoding="UTF-8"))
+corpus <- c(train_corpus, test_corpus)
+
+# Create label vector (0 = deceptive), (1 = truthful)
+labels <- c(rep(0,320),rep(1,320))
+test_labels <- c(rep(0,80),rep(1,80))
+
+# --- Pre-Processing 
+
+corpus <- tm_map(corpus, removePunctuation) # Remove Punctuation
+corpus <- tm_map(corpus, content_transformer(tolower)) # Make letters lower case
+corpus <- tm_map(corpus, removeWords, stopwords("english")) # Remove stop words
+corpus <- tm_map(corpus, removeNumbers) # Remove Numbers
+corpus <- tm_map(corpus, stripWhitespace) # Remove excess whitespace
+corpus <- tm_map(corpus, stemDocument) # Stemming document
+
+
+# --- Build Document Term Matrix for Training Set
+train_dtm <- DocumentTermMatrix(corpus[1:640])
+train_dtm <- removeSparseTerms(train_dtm,0.95)
+print('Training Corpus:')
+print(dim(train_dtm))
+
+# ---- Build Document Term Matrix for Testing Set
+test_dtm <- DocumentTermMatrix(corpus[641:800],list(dictionary=dimnames(train_dtm)[[2]]))
+print('Testing Corpus:')
+print(dim(test_dtm))
+
+
+#-----Classification trees--------------------------------------------
+#--Making a decision tree with the training set
+#--transforming the train set to data frame
+n <- as.matrix(test_dtm)
+test <- data.frame(n)
+
+m <- as.matrix(train_dtm)
+train <- data.frame(m)
+
+
+reviews.rpart <- rpart(labels~.,data=train,cp=0,method="class")
+labels<-as.factor(labels)
+
+#--------depict the first decision tree---------
+
+rpart.plot(reviews.rpart)
+
+
+#-----Prune the tree----------------------------
+
+reviews.rpart.pruned <- prune(reviews.rpart,cp=1.37e-02)
+# tree with lowest cv error
+
+reviews.rpart.pred <- predict(reviews.rpart.pruned,
+newdata=test,type="class")
+# show confusion matrix
+table(reviews.rpart.pred,test_labels)
+
+rpart.plot(reviews.rpart.pruned)
+rpart.plot(reviews.rpart)
+
+
+#--depict tree
+rpart.plot(reviews.tree, extra = 104, nn = FALSE)
+
+plot(reviews.tree,subtree = NULL)
+text(reviews.tree)
+
+
+
+#------------------------Random forests---------------------------------------------
+
+
+labels<-as.factor(labels)
+
+rf <-randomForest(labels~.,data=train, ntree=100) 
+
+
+table(predict(rf, newdata=test, type="class"),test_labels)
+plotcp(reviews.rpart)
+```
+
+```{r}
+------------------------------------------------------------------------------------------
+-----------------------------BIGRAMMS-----------------------------------------------------
+-------------------------------------------------------------------------------------------
+
+```
+
+
+
+```{r}
+
+#--function to identify the bigrams
+BigramTokenizer <-
+  function(x)
+    unlist(lapply(ngrams(words(x), 2), paste, collapse = " "), use.names = FALSE)
+
+
+# ---- Build Document Term Matrix for Training Set
+# --- Build Document Term Matrix for Training Set
+train_bigram_dtm <- DocumentTermMatrix(corpus[1:640], control = list(tokenize = BigramTokenizer))
+train_bigram_dtm <- removeSparseTerms(train_bigram_dtm,0.99)
+train_data <- cbind(as.matrix(train_dtm), as.matrix(train_bigram_dtm))
+
+# ---- Build Document Term Matrix for Testing Set
+test_dtm <- DocumentTermMatrix(corpus[641:800],list(dictionary=dimnames(train_dtm)[[2]]))
+test_data <- DocumentTermMatrix(corpus[641:800], control = list(dictionary=dimnames(train_data)[[2]]))
+test_data <- as.matrix(test_data)
+test_data <- test_data[,dimnames(train_data)[[2]]]
+
+
+
+
+
+
+#----------DECISION TREEE--------------
+mmm <- as.matrix(test_data)
+test1 <- data.frame(mmm)
+
+mm <- as.matrix(train_data )
+train1 <-data.frame(mm)
+
+reviews.tree2<-rpart(labels~.,data=train1 , cp=0,method="class")
+
+plotcp(reviews.tree2)
+
+reviews.rpart.pred2 <- predict(reviews.tree2,
+newdata=test1,type="class")
+
+
+table(reviews.rpart.pred2,test_labels)
+
+
+#-------PRUNE--------------------------
+
+reviews.rpart.pruned <- prune(reviews.tree2,cp=1.37e-02)
+rpart.plot(reviews.rpart.pruned )
+
+reviews.rpart.pred <- predict(reviews.tree2,
+newdata=test1,type="class")
+
+
+# show confusion matrix
+
+test_labels<-as.factor(test_labels)
+table(reviews.rpart.pred,test_labels)
+
+rpart.plot(reviews.rpart.pruned)
+rpart.plot(reviews.rpart)
+#----------------------------------
+
+
+labels<-as.factor(labels)
+
+rf <-randomForest(labels~.,data=train1, ntree=5,type="class") 
+table(predict(rf, newdata=test1, type="class"),test_labels)
+
+
+train.mi <- apply(train,2,function(x,y){mi.plugin(table(x,y)/length(y))},labels)
+train.mi.order <- order(train.mi,decreasing=F)
+train.mi[train.mi.order[1:5]]
+
+
+
+#sort(bingo2, decreasing = TRUE)
+#bingo2<-cor(train1,labels)
+
+
+train3.dtm <- as.matrix(train_dtm)
+train3.dtm <- matrix(as.numeric(train3.dtm > 0),nrow=640,ncol=321)
+train3.idf <- apply(train3.dtm,2,sum)
+train3.idf <- log2(640/train3.idf)
+test3.dtm <- as.matrix(test_dtm)
+for(i in 1:308){test3.dtm[,i] <- test3.dtm[,i]*train3.idf[i]}
+
+
+index.neg <- test_dtm[sample(nrow(test_dtm), 3), ]
+index.negg<- test_labels[sample(nrow(test_labels), 3), ]
+
+map_indices <- function(a,b) {
+  
+  new_vector <- b
+  
+  for(j in 1:length(b)){
+    value <- b[j]
+    matching <- a[value]
+    new_vector[j] <- matching
+  }
+  
+  return(new_vector)
+}
+
+
+
+map<-corpus[]
+labels <- c(rep(0,640),rep(641,800))
+
+corpus<-DocumentTermMatrix(corpus)
+
+labels<-as.matrix(labels)
+all<-map_indices(corpus$ncol,labels)
+
+
+
+
+
+library(RColorBrewer)				# Color selection for fancy tree plot
+library(party)					# Alternative decision tree algorithm
+library(partykit)
+
+```
+
